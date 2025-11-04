@@ -1,100 +1,54 @@
-# Import vizdoom for game env
-from vizdoom import * 
-# Import random for action sampling
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.actions.action_builder import ActionBuilder
+from selenium.webdriver.common.actions.mouse_button import MouseButton
+from selenium.webdriver import Keys, ActionChains
 import random
-# Import time for sleeping
-import time 
-# Import environment base class from OpenAI Gym
+import time
 from gym import Env
-# Import gym spaces 
 from gym.spaces import Discrete, Box
-# Import opencv 
 import cv2
 import numpy as np
-# Create Vizdoom OpenAI Gym Environment
-class VizDoomGym(Env): 
-    # Function that is called when we start the env
-    def __init__(self, render=False, config='vizdoom/ViZDoom/scenarios/deadly_corridor_s1.cfg'): 
-        # Inherit from Env
+
+class DiepEnv(Env):
+    def __init__(self):
         super().__init__()
-        # Setup the game 
-        self.game = DoomGame()
-        self.game.load_config(config)
-        
-        # Render frame logic
-        if render == False: 
-            self.game.set_window_visible(False)
-        else:
-            self.game.set_window_visible(True)
-        
-        # Start the game 
-        self.game.init()
-        
-        # Create the action space and observation space
-        self.observation_space = Box(low=0, high=255, shape=(60,60,1), dtype=np.uint8) 
-        self.action_space = Discrete(7)
-        
-        # Game variables: HEALTH DAMAGE_TAKEN HITCOUNT SELECTED_WEAPON_AMMO
-        self.damage_taken = 0
-        self.hitcount = 0
-        self.ammo = 52 ## CHANGED
-        
-        
-    # This is how we take a step in the environment
+        chrome_options = Options()
+        chrome_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+        self.driver = webdriver.Chrome(options=chrome_options)
+
     def step(self, action):
-        # Specify action and take step 
-        actions = np.identity(7)
-        movement_reward = self.game.make_action(actions[action], 4)
-        #if movement_reward < 0:
-        #    movement_reward *= 2
         
-        reward = 0 
-        # Get all the other stuff we need to retun 
-        if self.game.get_state(): 
-            state = self.game.get_state().screen_buffer
-            state = self.grayscale(state)
-            
-            # Reward shaping
-            game_variables = self.game.get_state().game_variables
-            health, damage_taken, hitcount, ammo = game_variables
-            
-            # Calculate reward deltas
-            damage_taken_delta = -damage_taken + self.damage_taken
-            self.damage_taken = damage_taken
-            hitcount_delta = hitcount - self.hitcount
-            self.hitcount = hitcount
-            ammo_delta = ammo - self.ammo
-            self.ammo = ammo
-            
-            reward = movement_reward*4 + damage_taken_delta*50 + hitcount_delta*1400 + ammo_delta*50
-            info = ammo
-        else: 
-            state = np.zeros(self.observation_space.shape)
-            info = 0 
-        
-        info = {"info":info}
-        done = self.game.is_episode_finished()
-        
-        return state, reward, done, info 
-    
-    # Define how to render the game or environment 
+        pass
+
     def render(self): 
         pass
+
+    def reset(self):
+        restart_button = self.driver.find_element(By.ID, "game-over-continue")
+        restart_button.click()
+        time.sleep(1)
+        play_button = self.driver.find_element(By.ID, "spawn-button")
+        play_button.click()
+        time.sleep(1)
+
+        self.canvas = self.driver.find_element(By.ID, "canvas")
+        return self.get_obs()
+
+    def get_scr(self):
+        screen = self.canvas.screenshot_as_png
+        image_array = cv2.imdecode(np.frombuffer(screen, np.uint8), cv2.IMREAD_COLOR)
+        return image_array
     
-    # What happens when we start a new game 
-    def reset(self): 
-        self.game.new_episode()
-        state = self.game.get_state().screen_buffer
-        return self.grayscale(state)
-    
-    # Grayscale the game frame and resize it 
-    def grayscale(self, observation):
-        gray = cv2.cvtColor(np.moveaxis(observation, 0, -1), cv2.COLOR_BGR2GRAY)
-        gray = gray[90:200, 0:320]
-        resize = cv2.resize(gray, (64,64), interpolation=cv2.INTER_CUBIC)
-        state = np.reshape(resize, (64,64,1))
-        return state
-    
-    # Call to close down the game
-    def close(self): 
-        self.game.close()
+    def get_obs(self):
+        image_array = self.get_scr()
+        gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
+        gray = cv2.threshold(gray,190,255,cv2.THRESH_BINARY)[1]
+        gray = gray[:, 250:-250]
+        gray = cv2.resize(gray, (128,128))
+        gray = np.reshape(gray, (128,128,1))
+        return gray
+
+    def close(self):
+        pass

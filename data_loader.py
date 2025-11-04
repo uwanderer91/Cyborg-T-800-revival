@@ -1,16 +1,16 @@
 import numpy as np
 import torch
 
-def save_spectation(spec_data, filename='spectation_data.npz'):
+def save_map(spec_data, filename='map_data.npz'):
     np.savez(filename, **spec_data)
-    print("Данные сохранены в "+filename)
+    print("Data saved in "+filename)
 
-def load_spectation(filename='spectation_data.npz'):
-    spec_data = np.load(filename)
-    expert_data = {}
+def load_map(filename='map_data.npz'):
+    file_data = np.load(filename)
+    data = {}
     
-    for key in spec_data.files:
-        expert_data[key] = spec_data[key]
+    for key in file_data.files:
+        data[key] = file_data[key]
 
-    spec_data.close()
-    return expert_data
+    file_data.close()
+    return data
